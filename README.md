@@ -11,15 +11,6 @@ The project is organized into 4 modules:
 - **TinyAgentOpenAI**: OpenAI API client implementation
 - **TinyAgentCLI**: Command-line interface tool
 
-## Mapping from Original Rust Project
-
-| Original Rust Project | Swift Implementation |
-|----------------------|---------------------|
-| `actor` crate | `TinyAgentCore` module (Agent actor) |
-| `model` crate | `TinyAgentCore` module (ModelClient protocol) |
-| `core` crate | `TinyAgentCore` module |
-| `little-agent` crate | `TinyAgent` module |
-
 ## Core Features
 
 - **Actor Model**: Agent is an Actor with message-driven interaction and safe state management

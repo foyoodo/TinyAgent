@@ -4,8 +4,8 @@ import Foundation
 public enum AgentEvent: Sendable {
     /// Agent enters idle state
     case idle
-    /// Transcript generated (streaming)
-    case transcript(String, TranscriptSource)
+    /// Transcript delta (streaming chunk)
+    case transcriptDelta(TranscriptDelta)
     /// Error occurred
     case error(any ModelProviderError)
     /// Tool call request requiring user approval
@@ -25,9 +25,25 @@ public enum AgentStage: Sendable {
 public enum TranscriptSource: Sendable {
     case user
     case assistant
-    
+
     public var isAssistant: Bool {
         self == .assistant
+    }
+}
+
+/// Represents a delta (incremental update) of a transcript
+public struct TranscriptDelta: Sendable {
+    /// The new content chunk to append
+    public let content: String
+    /// Whether this is the final chunk of the transcript
+    public let isComplete: Bool
+    /// The source of the transcript (user or assistant)
+    public let source: TranscriptSource
+
+    public init(content: String, isComplete: Bool, source: TranscriptSource) {
+        self.content = content
+        self.isComplete = isComplete
+        self.source = source
     }
 }
 
@@ -62,7 +78,7 @@ public struct ModelClientResponse: Sendable {
 /// Agent Actor using Swift Actor for state isolation
 public actor Agent {
     // Dependencies
-    private var modelClient: ModelClient?
+    private var modelClient: ModelClient
     private let toolManager: ToolManager
     private var conversation: Conversation
     
@@ -122,8 +138,9 @@ public actor Agent {
     }
     
     private func processInput(_ input: String) async {
-        // Notify user input
-        eventContinuation.yield(.transcript(input, .user))
+        // Yield user transcript as a complete delta (no streaming for user input)
+        let delta = TranscriptDelta(content: input, isComplete: true, source: .user)
+        eventContinuation.yield(.transcriptDelta(delta))
         
         // Add to conversation
         conversation.append(Conversation.Item(
@@ -136,23 +153,27 @@ public actor Agent {
     
     private func requestModel() async {
         currentStage = .modelThinking
-        
+
         let request = await buildModelRequest()
-        let client = modelClient!
-        
-        Task { [weak self] in
-            guard let self = self else { return }
-            
+
+        // Capture continuation locally to avoid actor boundary crossing in the callback
+        let continuation = eventContinuation
+
+        Task {
             do {
-                let response = try await client.sendRequest(request) { [weak self] transcript in
-                    guard let self = self else { return }
-                    Task {
-                        await self.eventContinuation.yield(.transcript(transcript, .assistant))
-                    }
+                let response = try await modelClient.sendRequest(request) { chunk in
+                    // Forward the delta chunk from model client immediately
+                    let delta = TranscriptDelta(content: chunk, isComplete: false, source: .assistant)
+                    continuation.yield(.transcriptDelta(delta))
                 }
-                await self.handleModelResponse(.success(response))
+
+                // Signal completion of the transcript stream
+                let finalDelta = TranscriptDelta(content: "", isComplete: true, source: .assistant)
+                continuation.yield(.transcriptDelta(finalDelta))
+
+                await handleModelResponse(.success(response))
             } catch {
-                await self.handleModelResponse(.failure(error))
+                await handleModelResponse(.failure(error))
             }
         }
     }
