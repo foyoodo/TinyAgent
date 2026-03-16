@@ -9,12 +9,14 @@ public actor OpenAIModelClient: ModelClient {
     public init(
         apiKey: String,
         baseURL: String = "https://api.openai.com/v1",
-        model: String = "gpt-4"
+        model: String = "gpt-4",
+        userAgent: String? = nil
     ) {
         self.config = OpenAIConfig(
             apiKey: apiKey,
             model: model,
-            baseURL: baseURL
+            baseURL: baseURL,
+            userAgent: userAgent
         )
         self.urlSession = URLSession(configuration: .default)
     }
@@ -29,6 +31,11 @@ public actor OpenAIModelClient: ModelClient {
         urlRequest.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+        // Set custom User-Agent if provided
+        if let userAgent = config.userAgent {
+            urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        }
         
         // Build request body
         let openAIRequest = createRequest(request)
@@ -92,10 +99,10 @@ public actor OpenAIModelClient: ModelClient {
                         break
                     }
                     
-                    // Handle content delta
-                    if let delta = choice.delta.content {
-                        content.append(delta)
-                        onTranscript?(delta)
+                    // Handle content delta (supports both content and reasoning_content fields)
+                    if let deltaText = choice.delta.textContent {
+                        content.append(deltaText)
+                        onTranscript?(deltaText)
                     }
                     
                     // Handle tool calls

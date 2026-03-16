@@ -30,12 +30,12 @@ let package = Package(
         ),
         .executableTarget(
             name: "TinyAgentCLI",
-            dependencies: ["TinyAgent"],
+            dependencies: ["TinyAgent", "TinyAgentOpenAI"],
             path: "Sources/CLI"
         ),
         .testTarget(
             name: "TinyAgentTests",
-            dependencies: ["TinyAgent"],
+            dependencies: ["TinyAgent", "TinyAgentOpenAI"],
             path: "Tests/TinyAgentTests"
         )
     ]

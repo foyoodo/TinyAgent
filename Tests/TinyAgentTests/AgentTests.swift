@@ -85,11 +85,11 @@ struct AgentTests {
             if Date().timeIntervalSince(startTime) > 3.0 { break }
             
             switch event {
-            case .transcript(let text, let source):
-                if source == .user && text == "Test message" {
+            case .transcriptDelta(let delta):
+                if delta.source == .user && delta.content == "Test message" {
                     hasUserTranscript = true
                 }
-                if source == .assistant && text == expectedResponse {
+                if delta.source == .assistant && delta.content == expectedResponse {
                     hasAssistantTranscript = true
                 }
             case .idle:

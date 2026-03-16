@@ -70,42 +70,54 @@ struct FunctionTool: Encodable {
     }
 }
 
-struct ToolCall: Codable {
-    var id: String?
-    var type: String?
-    let index: Int?
-    var function: FunctionToolCall?
+/// Tool call in a delta
+public struct ToolCall: Codable {
+    public var id: String?
+    public var type: String?
+    public let index: Int?
+    public var function: FunctionToolCall?
 }
 
-struct FunctionToolCall: Codable {
-    var name: String?
-    var arguments: String?
+/// Function tool call details
+public struct FunctionToolCall: Codable {
+    public var name: String?
+    public var arguments: String?
 }
 
 // MARK: - Response Types
 
-struct ChatCompletionChunk: Codable {
-    let id: String
-    let choices: [Choice]
+/// Chat completion chunk from streaming response
+public struct ChatCompletionChunk: Codable {
+    public let id: String
+    public let choices: [Choice]
 }
 
-struct Choice: Codable {
-    let delta: Delta
-    let finishReason: String?
-    
+/// Choice within a chat completion chunk
+public struct Choice: Codable {
+    public let delta: Delta
+    public let finishReason: String?
+
     enum CodingKeys: String, CodingKey {
         case delta
         case finishReason = "finish_reason"
     }
 }
 
-struct Delta: Codable {
-    let content: String?
-    let toolCalls: [ToolCall]?
-    
+/// Delta content in a streaming chunk
+public struct Delta: Codable {
+    public let content: String?
+    public let reasoningContent: String?
+    public let toolCalls: [ToolCall]?
+
     enum CodingKeys: String, CodingKey {
         case content
+        case reasoningContent = "reasoning_content"
         case toolCalls = "tool_calls"
+    }
+
+    /// Returns the actual text content from either content or reasoning_content field
+    public var textContent: String? {
+        content ?? reasoningContent
     }
 }
 

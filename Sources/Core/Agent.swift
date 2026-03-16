@@ -133,10 +133,10 @@ public actor Agent {
             pendingInputs.append(input)
             return
         }
-        
+
         await processInput(input)
     }
-    
+
     private func processInput(_ input: String) async {
         // Yield user transcript as a complete delta (no streaming for user input)
         let delta = TranscriptDelta(content: input, isComplete: true, source: .user)

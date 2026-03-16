@@ -1,20 +1,49 @@
 import Foundation
 import TinyAgent
+import TinyAgentOpenAI
 
-/// Simple mock model client with streaming simulation
-/// Note: Struct is implicitly Sendable (no mutable state), avoiding actor serialization
+/// Reads environment variables from the system
+func getEnvironmentVariable(_ name: String) -> String? {
+    ProcessInfo.processInfo.environment[name]
+}
+
+/// Configuration for the model client
+struct ModelClientConfig {
+    let apiKey: String?
+    let baseURL: String?
+    let model: String?
+    let userAgent: String?
+
+    var isConfigured: Bool {
+        apiKey != nil && !apiKey!.isEmpty
+    }
+
+    static func fromEnvironment() -> ModelClientConfig {
+        ModelClientConfig(
+            apiKey: getEnvironmentVariable("OPENAI_API_KEY"),
+            baseURL: getEnvironmentVariable("OPENAI_BASE_URL"),
+            model: getEnvironmentVariable("OPENAI_MODEL"),
+            userAgent: getEnvironmentVariable("OPENAI_USER_AGENT")
+        )
+    }
+}
+
+/// Simple mock model client with word-by-word streaming
+/// Falls back when OpenAI is not configured
 struct MockModelClient: ModelClient {
     func sendRequest(
         _ request: ModelRequest,
         onTranscript: (@Sendable (String) -> Void)?
     ) async throws -> ModelClientResponse {
-        let response = "I'm a mock model. To use real LLMs, implement a proper ModelClient."
+        let response = "I'm a mock model. To use real LLMs, set OPENAI_API_KEY environment variable."
 
-        // Stream each character with a small delay
-        for char in response {
-            onTranscript?(String(char))
-            // Yield control back to the runtime for immediate delivery
-            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        // Stream word by word with small delays
+        let words = response.split(separator: " ").map(String.init)
+        for (index, word) in words.enumerated() {
+            let isLast = index == words.count - 1
+            let content = isLast ? word : word + " "
+            onTranscript?(content)
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50ms between words
         }
 
         return ModelClientResponse(
@@ -26,19 +55,58 @@ struct MockModelClient: ModelClient {
     }
 }
 
+/// Creates the appropriate model client based on environment configuration
+func createModelClient(config: ModelClientConfig) -> any ModelClient {
+    guard config.isConfigured else {
+        return MockModelClient()
+    }
+
+    let baseURL = config.baseURL ?? "https://api.openai.com/v1"
+    let model = config.model ?? "gpt-4"
+
+    return OpenAIModelClient(
+        apiKey: config.apiKey!,
+        baseURL: baseURL,
+        model: model,
+        userAgent: config.userAgent
+    )
+}
+
 @main
 struct TinyAgentCLI {
     static func main() async {
         print("TinyAgent Swift CLI")
         print("=====================")
         print("")
-        print("Note: This is a skeleton implementation.")
-        print("You need to implement a ModelClient to use it with real LLMs.")
+
+        // Read configuration from environment
+        let config = ModelClientConfig.fromEnvironment()
+
+        if config.isConfigured {
+            print("Using OpenAI API")
+            if let baseURL = config.baseURL {
+                print("  Base URL: \(baseURL)")
+            }
+            if let model = config.model {
+                print("  Model: \(model)")
+            }
+        } else {
+            print("Using Mock Model Client (set OPENAI_API_KEY to use OpenAI)")
+            print("")
+            print("Environment variables:")
+            print("  OPENAI_API_KEY - Your API key (required)")
+            print("  OPENAI_BASE_URL - API base URL (default: https://api.openai.com/v1)")
+            print("  OPENAI_MODEL - Model name (default: gpt-4)")
+            print("  OPENAI_USER_AGENT - Custom User-Agent header")
+        }
         print("")
+
+        // Create model client
+        let modelClient = createModelClient(config: config)
 
         // Create session
         var builder = SessionBuilder()
-        builder.withModelClient(MockModelClient())
+        builder.withModelClient(modelClient)
         builder.withSystemPrompt("You are a helpful assistant")
 
         let session = await builder.build()
@@ -114,7 +182,7 @@ struct TinyAgentCLI {
             case .toolCallCompleted(let id, let result):
                 switch result {
                 case .success(let output):
-                    print("[Tool \(id) completed successfully]")
+                    print("[Tool \(id) completed successfully]: \(output)")
                 case .failure(let error):
                     print("[Tool \(id) failed]: \(error.reason)")
                 }
