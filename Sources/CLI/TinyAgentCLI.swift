@@ -8,7 +8,7 @@ func getEnvironmentVariable(_ name: String) -> String? {
 }
 
 /// Configuration for the model client
-struct ModelClientConfig {
+struct ModelClientConfig: Sendable {
     let apiKey: String?
     let baseURL: String?
     let model: String?
@@ -30,7 +30,7 @@ struct ModelClientConfig {
 
 /// Simple mock model client with word-by-word streaming
 /// Falls back when OpenAI is not configured
-struct MockModelClient: ModelClient {
+struct MockModelClient: ModelClient, Sendable {
     func sendRequest(
         _ request: ModelRequest,
         onTranscript: (@Sendable (String) -> Void)?
@@ -114,8 +114,8 @@ struct TinyAgentCLI {
         // Get event stream
         let events = await session.events
 
-        // Start event processing loop
-        Task {
+        // Start event processing loop in background
+        _ = Task.detached { @Sendable in
             await handleEvents(events)
         }
 

@@ -159,9 +159,11 @@ public actor Agent {
         // Capture continuation locally to avoid actor boundary crossing in the callback
         let continuation = eventContinuation
 
-        Task {
+        // Use detached task to avoid inheriting actor context while still safely accessing continuation
+        Task.detached { [weak self] in
+            guard let self = self else { return }
             do {
-                let response = try await modelClient.sendRequest(request) { chunk in
+                let response = try await self.modelClient.sendRequest(request) { chunk in
                     // Forward the delta chunk from model client immediately
                     let delta = TranscriptDelta(content: chunk, isComplete: false, source: .assistant)
                     continuation.yield(.transcriptDelta(delta))
@@ -171,9 +173,9 @@ public actor Agent {
                 let finalDelta = TranscriptDelta(content: "", isComplete: true, source: .assistant)
                 continuation.yield(.transcriptDelta(finalDelta))
 
-                await handleModelResponse(.success(response))
+                await self.handleModelResponse(.success(response))
             } catch {
-                await handleModelResponse(.failure(error))
+                await self.handleModelResponse(.failure(error))
             }
         }
     }
@@ -190,7 +192,7 @@ public actor Agent {
             if let modelError = error as? any ModelProviderError {
                 eventContinuation.yield(.error(modelError))
             }
-            completeAgentLoop()
+            await completeAgentLoop()
             
         case .success(let response):
             // Add to conversation
@@ -211,7 +213,7 @@ public actor Agent {
                 currentStage = .runningTools
                 await handleToolCalls(response.toolCalls)
             } else {
-                completeAgentLoop()
+                await completeAgentLoop()
             }
         }
     }
@@ -219,12 +221,16 @@ public actor Agent {
     private func handleToolCalls(_ calls: [ToolCallRequest]) async {
         pendingToolCalls = calls.map { $0.id }
         
-        await withTaskGroup(of: Void.self) { group in
+        // Capture necessary values to avoid capturing self in concurrent context
+        let toolManager = self.toolManager
+        
+        await withTaskGroup(of: Void.self) { [weak self] group in
             for call in calls {
                 group.addTask { [weak self] in
                     guard let self = self else { return }
-                    let result = await self.toolManager.handleRequest(call) { approval in
-                        await self.requestApproval(approval)
+                    let result = await toolManager.handleRequest(call) { [weak self] approval in
+                        guard let self = self else { return false }
+                        return await self.requestApproval(approval)
                     }
                     await self.handleToolResult(id: call.id, result: result)
                 }
@@ -280,12 +286,10 @@ public actor Agent {
         await requestModel()
     }
     
-    private func completeAgentLoop() {
+    private func completeAgentLoop() async {
         if let input = pendingInputs.first {
             pendingInputs.removeFirst()
-            Task {
-                await processInput(input)
-            }
+            await processInput(input)
         } else {
             currentStage = .idle
             eventContinuation.yield(.idle)

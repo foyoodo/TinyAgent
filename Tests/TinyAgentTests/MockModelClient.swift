@@ -30,7 +30,7 @@ public actor MockModelClient: ModelClient {
 }
 
 /// Test model response
-public struct TestModelResponse: ModelResponse {
+public struct TestModelResponse: ModelResponse, Sendable {
     public typealias Error = TestModelError
     
     public let transcript: String
@@ -40,7 +40,7 @@ public struct TestModelResponse: ModelResponse {
 }
 
 /// Test model error
-public struct TestModelError: ModelProviderError {
+public struct TestModelError: ModelProviderError, Sendable {
     public let errorKind: ErrorKind
     public let reason: String
     

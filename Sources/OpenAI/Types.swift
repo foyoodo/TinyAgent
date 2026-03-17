@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Request Types
 
-struct ChatCompletionRequest: Encodable {
+struct ChatCompletionRequest: Encodable, Sendable {
     let model: String
     let messages: [Message]
     let tools: [Tool]
@@ -18,7 +18,7 @@ struct ChatCompletionRequest: Encodable {
     }
 }
 
-struct StreamOptions: Encodable {
+struct StreamOptions: Encodable, Sendable {
     let includeUsage: Bool
     
     enum CodingKeys: String, CodingKey {
@@ -26,7 +26,7 @@ struct StreamOptions: Encodable {
     }
 }
 
-struct Message: Encodable {
+struct Message: Encodable, Sendable {
     let role: String
     let content: String?
     let toolCalls: [ToolCall]?
@@ -40,12 +40,12 @@ struct Message: Encodable {
     }
 }
 
-struct Tool: Encodable {
+struct Tool: Encodable, Sendable {
     let type: String
     let function: FunctionTool
 }
 
-struct FunctionTool: Encodable {
+struct FunctionTool: Encodable, Sendable {
     let name: String
     let description: String
     let parameters: [String: Sendable]
@@ -71,7 +71,7 @@ struct FunctionTool: Encodable {
 }
 
 /// Tool call in a delta
-public struct ToolCall: Codable {
+public struct ToolCall: Codable, Sendable {
     public var id: String?
     public var type: String?
     public let index: Int?
@@ -79,7 +79,7 @@ public struct ToolCall: Codable {
 }
 
 /// Function tool call details
-public struct FunctionToolCall: Codable {
+public struct FunctionToolCall: Codable, Sendable {
     public var name: String?
     public var arguments: String?
 }
@@ -87,13 +87,13 @@ public struct FunctionToolCall: Codable {
 // MARK: - Response Types
 
 /// Chat completion chunk from streaming response
-public struct ChatCompletionChunk: Codable {
+public struct ChatCompletionChunk: Codable, Sendable {
     public let id: String
     public let choices: [Choice]
 }
 
 /// Choice within a chat completion chunk
-public struct Choice: Codable {
+public struct Choice: Codable, Sendable {
     public let delta: Delta
     public let finishReason: String?
 
@@ -104,7 +104,7 @@ public struct Choice: Codable {
 }
 
 /// Delta content in a streaming chunk
-public struct Delta: Codable {
+public struct Delta: Codable, Sendable {
     public let content: String?
     public let reasoningContent: String?
     public let toolCalls: [ToolCall]?
@@ -123,7 +123,9 @@ public struct Delta: Codable {
 
 // MARK: - AnyCodable Helper
 
-struct AnyCodable: Codable {
+// AnyCodable is used internally for encoding JSON parameters where Sendable safety
+// is ensured by the caller (all values come from ToolDefinition.parameters which is [String: Sendable])
+struct AnyCodable: Codable, @unchecked Sendable {
     let value: Any
     
     init(_ value: Any) {

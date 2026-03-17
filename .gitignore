@@ -1,2 +1,4 @@
 .swiftpm/
 .build/
+.agents/
+skills-lock.json
