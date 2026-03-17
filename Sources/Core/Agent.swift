@@ -22,12 +22,29 @@ public enum AgentStage: Sendable {
 }
 
 /// Transcript source
-public enum TranscriptSource: Sendable {
+public enum TranscriptSource: Sendable, Equatable {
     case user
-    case assistant
+    case assistant(isReasoning: Bool)
 
     public var isAssistant: Bool {
-        self == .assistant
+        if case .assistant = self { return true }
+        return false
+    }
+
+    public var isReasoning: Bool {
+        if case .assistant(let reasoning) = self { return reasoning }
+        return false
+    }
+
+    public static func == (lhs: TranscriptSource, rhs: TranscriptSource) -> Bool {
+        switch (lhs, rhs) {
+        case (.user, .user):
+            return true
+        case (.assistant(let lhsReasoning), .assistant(let rhsReasoning)):
+            return lhsReasoning == rhsReasoning
+        default:
+            return false
+        }
     }
 }
 
@@ -37,7 +54,7 @@ public struct TranscriptDelta: Sendable {
     public let content: String
     /// Whether this is the final chunk of the transcript
     public let isComplete: Bool
-    /// The source of the transcript (user or assistant)
+    /// The source of the transcript (user, assistant, or assistantReasoning)
     public let source: TranscriptSource
 
     public init(content: String, isComplete: Bool, source: TranscriptSource) {
@@ -51,7 +68,7 @@ public struct TranscriptDelta: Sendable {
 public protocol ModelClient: Sendable {
     func sendRequest(
         _ request: ModelRequest,
-        onTranscript: (@Sendable (String) -> Void)?
+        onTranscript: (@Sendable (String, Bool) -> Void)?
     ) async throws -> ModelClientResponse
 }
 
@@ -162,14 +179,14 @@ public actor Agent {
         // Agent actor methods are serialized, so state access is safe
         Task {
             do {
-                let response = try await client.sendRequest(request) { chunk in
+                let response = try await client.sendRequest(request) { chunk, isReasoning in
                     // Forward the delta chunk from model client immediately
-                    let delta = TranscriptDelta(content: chunk, isComplete: false, source: .assistant)
+                    let delta = TranscriptDelta(content: chunk, isComplete: false, source: .assistant(isReasoning: isReasoning))
                     continuation.yield(.transcriptDelta(delta))
                 }
 
                 // Signal completion of the transcript stream
-                let finalDelta = TranscriptDelta(content: "", isComplete: true, source: .assistant)
+                let finalDelta = TranscriptDelta(content: "", isComplete: true, source: .assistant(isReasoning: false))
                 continuation.yield(.transcriptDelta(finalDelta))
 
                 await handleModelResponse(.success(response))

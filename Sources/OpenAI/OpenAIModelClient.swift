@@ -23,7 +23,7 @@ public actor OpenAIModelClient: ModelClient {
     
     public func sendRequest(
         _ request: ModelRequest,
-        onTranscript: (@Sendable (String) -> Void)?
+        onTranscript: (@Sendable (String, Bool) -> Void)?
     ) async throws -> ModelClientResponse {
         let url = URL(string: "\(config.baseURL)/chat/completions")!
         var urlRequest = URLRequest(url: url)
@@ -100,9 +100,12 @@ public actor OpenAIModelClient: ModelClient {
                     }
                     
                     // Handle content delta (supports both content and reasoning_content fields)
-                    if let deltaText = choice.delta.textContent {
-                        content.append(deltaText)
-                        onTranscript?(deltaText)
+                    if let contentText = choice.delta.content {
+                        content.append(contentText)
+                        onTranscript?(contentText, false)
+                    } else if let reasoningText = choice.delta.reasoningContent {
+                        content.append(reasoningText)
+                        onTranscript?(reasoningText, true)
                     }
                     
                     // Handle tool calls

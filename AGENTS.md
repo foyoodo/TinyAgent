@@ -75,6 +75,16 @@ for await event in events {
     switch event {
     case .idle: break
     case .transcriptDelta(let delta): // streaming chunk
+        switch delta.source {
+        case .user:
+            // User input
+        case .assistant(let isReasoning):
+            if isReasoning {
+                // Model thinking/reasoning content (e.g., from reasoning_content field)
+            } else {
+                // Normal assistant response content
+            }
+        }
     case .error(let error):
     case .toolCallRequest(let approval): // needs user approval
     case .toolCallCompleted(let id, let result):
@@ -132,7 +142,20 @@ public protocol Tool: Sendable {
 `OpenAIModelClient` uses SSE for streaming responses:
 1. `SSEParser` actor parses SSE format line by line
 2. `Delta` type handles both `content` and `reasoning_content` fields
-3. Tool calls are accumulated across multiple chunks
+3. Content from `reasoning_content` is marked with `source: .assistant(isReasoning: true)`
+4. Content from `content` field uses `source: .assistant(isReasoning: false)`
+5. Tool calls are accumulated across multiple chunks
+
+### ModelClient Protocol
+
+The `ModelClient` protocol's `onTranscript` callback includes an `isReasoning` flag that maps to `TranscriptSource.assistant(isReasoning:)`:
+
+```swift
+func sendRequest(
+    _ request: ModelRequest,
+    onTranscript: (@Sendable (String, Bool) -> Void)?  // (content, isReasoning)
+) async throws -> ModelClientResponse
+```
 
 ### State Isolation
 

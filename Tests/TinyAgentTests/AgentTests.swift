@@ -30,7 +30,7 @@ struct AgentTests {
         let holder = TranscriptHolder()
         let response = try await mockClient.sendRequest(
             ModelRequest(messages: [], tools: []),
-            onTranscript: { transcript in
+            onTranscript: { transcript, _ in
                 Task { await holder.set(transcript) }
             }
         )
@@ -146,7 +146,7 @@ struct AgentTests {
                     if delta.source == .user && delta.content == "Test message" {
                         await flags.setUser()
                     }
-                    if delta.source == .assistant && delta.content == expectedResponse {
+                    if delta.source.isAssistant && delta.content == expectedResponse {
                         await flags.setAssistant()
                     }
                 case .idle:
