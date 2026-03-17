@@ -156,14 +156,16 @@ public actor Agent {
 
         let request = await buildModelRequest()
 
-        // Capture continuation locally to avoid actor boundary crossing in the callback
+        // Capture continuation and modelClient locally to avoid actor boundary crossing
         let continuation = eventContinuation
+        let client = modelClient
 
-        // Use detached task to avoid inheriting actor context while still safely accessing continuation
-        Task.detached { [weak self] in
+        // Use structured concurrency with Task instead of Task.detached
+        // Task inherits actor context but we don't access actor state directly in the closure
+        Task { [weak self] in
             guard let self = self else { return }
             do {
-                let response = try await self.modelClient.sendRequest(request) { chunk in
+                let response = try await client.sendRequest(request) { chunk in
                     // Forward the delta chunk from model client immediately
                     let delta = TranscriptDelta(content: chunk, isComplete: false, source: .assistant)
                     continuation.yield(.transcriptDelta(delta))
@@ -220,14 +222,13 @@ public actor Agent {
     
     private func handleToolCalls(_ calls: [ToolCallRequest]) async {
         pendingToolCalls = calls.map { $0.id }
-        
+
         // Capture necessary values to avoid capturing self in concurrent context
         let toolManager = self.toolManager
-        
-        await withTaskGroup(of: Void.self) { [weak self] group in
+
+        await withTaskGroup(of: Void.self) { group in
             for call in calls {
-                group.addTask { [weak self] in
-                    guard let self = self else { return }
+                group.addTask {
                     let result = await toolManager.handleRequest(call) { [weak self] approval in
                         guard let self = self else { return false }
                         return await self.requestApproval(approval)

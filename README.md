@@ -1,10 +1,10 @@
 # TinyAgent
 
-A Swift Concurrency-based LLM Agent framework built with the Actor model. TinyAgent provides a robust, type-safe, and composable architecture for building AI-powered applications with tool calling capabilities.
+A Swift 6 Concurrency-based LLM Agent framework built with the Actor model. TinyAgent provides a type-safe, composable architecture for building AI-powered applications with tool calling capabilities.
 
 ## Features
 
-- **Actor Model Design**: Safe state isolation using Swift Actors with message-driven interactions
+- **Actor Model Design**: Safe state isolation using Swift Actors with strict concurrency checking
 - **Event Streaming**: AsyncStream-based event handling for real-time responses and streaming transcripts
 - **Tool System**: Extensible tool protocol with automatic schema generation and user approval flow
 - **State Machine**: Clear agent lifecycle (Idle → ModelThinking → RunningTools → Idle)
@@ -40,20 +40,7 @@ Then add the desired products to your target:
 )
 ```
 
-## Project Structure
-
-The framework is organized into four modules:
-
-| Module | Description |
-|--------|-------------|
-| **TinyAgentCore** | Core abstractions: `Agent`, `Tool`, `ModelClient`, `Conversation` |
-| **TinyAgent** | High-level API with `Session` and built-in tools |
-| **TinyAgentOpenAI** | OpenAI API client implementation |
-| **TinyAgentCLI** | Command-line interface executable |
-
 ## Quick Start
-
-### Basic Usage
 
 ```swift
 import TinyAgent
@@ -74,7 +61,7 @@ let session = await builder.build()
 
 // Listen for events
 let events = await session.events
-Task.detached { @Sendable in
+Task {
     for await event in events {
         handleEvent(event)
     }
@@ -91,21 +78,20 @@ func handleEvent(_ event: AgentEvent) {
     switch event {
     case .idle:
         print("Agent is ready for input")
-        
+
     case .transcriptDelta(let delta):
         if delta.source == .assistant {
             print(delta.content, terminator: "")
         }
-        
+
     case .error(let error):
         print("Error: \(error)")
-        
+
     case .toolCallRequest(let approval):
         print("\nTool request: \(approval.toolName)")
         print("Action: \(approval.what)")
-        // Require user confirmation for sensitive operations
         approval.approve() // or approval.reject()
-        
+
     case .toolCallCompleted(let id, let result):
         switch result {
         case .success(let output):
@@ -122,30 +108,15 @@ func handleEvent(_ event: AgentEvent) {
 ### Agent State Machine
 
 ```
-┌─────┐    enqueueUserInput     ┌─────────────────┐
-│idle │ ──────────────────────> │  processInput() │
-└─────┘                         └────────┬────────┘
-    ▲                                    │
-    │                                    ▼
-    │                         ┌─────────────────┐
-    │                         │ modelThinking   │
-    │                         │  (streaming)    │
-    │                         └────────┬────────┘
-    │                                    │
-    │         ┌────────────┐             │ tool calls
-    │         │    stop    │             │
-    └─────────┤            │<────────────┤
-              └────────────┘             ▼
-                              ┌─────────────────┐
-                              │  runningTools   │
-                              │ (parallel exec) │
-                              └────────┬────────┘
-                                       │
-                                       │ all done
-                                       ▼
-                              ┌─────────────────┐
-                              │  requestModel() │
-                              └─────────────────┘
+idle ──enqueueUserInput()──> processInput() ──> modelThinking
+  ▲                                                 │
+  │                                                 │ tool calls
+  │                                                 ▼
+  └─────────────────────────────────────── runningTools (parallel)
+                                                │
+                                                │ all done
+                                                ▼
+                                         requestModel()
 ```
 
 ### Event Streaming
@@ -207,35 +178,24 @@ import TinyAgent
 struct CalculatorTool: Tool {
     let name = "calculator"
     let description = "Perform basic arithmetic calculations"
-    
+
     var parameterSchema: [String: Sendable] {
-        [
-            "expression": "string (e.g., '2 + 2')"
-        ]
+        ["expression": "string (e.g., '2 + 2')"]
     }
-    
+
     func makeApproval(input: [String: Sendable]) -> Approval? {
         // Return nil for safe operations, Approval for dangerous ones
         return nil
     }
-    
+
     func execute(input: [String: Sendable]) async -> ToolResult {
         guard let expression = input["expression"] as? String else {
             return .failure(ToolError(kind: .invalidInput, reason: "Missing expression"))
         }
-        
         // Perform calculation...
         return .success("4")
     }
 }
-
-// Register with the builder
-var builder = SessionBuilder()
-builder.withModelClient(modelClient)
-builder.withSystemPrompt("You have access to a calculator tool")
-
-// Note: Built-in tools are automatically registered by SessionBuilder
-// For custom tools, use AgentBuilder directly
 ```
 
 ## Implementing a Custom ModelClient
@@ -250,11 +210,11 @@ struct MyModelClient: ModelClient {
     ) async throws -> ModelClientResponse {
         // Call your LLM API
         // Invoke onTranscript for each streaming chunk
-        
+
         return ModelClientResponse(
             transcript: "Full response text",
             opaqueMessage: nil,
-            toolCalls: [],  // Return tool calls if the model requests them
+            toolCalls: [],
             finishReason: .stop
         )
     }
@@ -263,62 +223,39 @@ struct MyModelClient: ModelClient {
 
 ## CLI Usage
 
-Build and run the CLI:
-
 ```bash
-swift build
-swift run tiny-agent-cli
-```
-
-Configure via environment variables:
-
-```bash
+# Run with OpenAI API
 export OPENAI_API_KEY="sk-..."
-export OPENAI_BASE_URL="https://api.openai.com/v1"  # Optional
-export OPENAI_MODEL="gpt-4"                         # Optional
-export OPENAI_USER_AGENT="MyApp/1.0"                # Optional
+swift run tiny-agent-cli
 
+# Or use mock client (no API key required)
 swift run tiny-agent-cli
 ```
 
-If `OPENAI_API_KEY` is not set, the CLI falls back to a mock model that demonstrates the streaming behavior.
+Environment variables:
+- `OPENAI_API_KEY` - Required for OpenAI API
+- `OPENAI_BASE_URL` - Optional (default: https://api.openai.com/v1)
+- `OPENAI_MODEL` - Optional (default: gpt-4)
+- `OPENAI_USER_AGENT` - Optional
 
 ## Development
 
-### Build Commands
-
 ```bash
-# Build the project
 swift build
-
-# Run all tests
 swift test
-
-# Run a specific test suite
 swift test --filter SessionTests
-swift test --filter AgentTests
-swift test --filter ToolTests
-swift test --filter OpenAIModelClientTests
-
-# Run a specific test function
 swift test --filter SessionTests.sessionBuilderCreatesSession
-
-# Build in release mode
-swift build -c release
-
-# Clean build artifacts
-swift package clean
+swift run tiny-agent-cli
 ```
 
-### Project Structure
+## Project Structure
 
 ```
 Sources/
 ├── Core/               # TinyAgentCore module
 │   ├── Agent.swift     # Main actor with state machine
-│   ├── AgentBuilder.swift
-│   ├── Tool.swift      # Tool protocol and ToolManager
-│   ├── Model.swift     # ModelClient protocol and types
+│   ├── Tool.swift      # Tool protocol and ToolManager actor
+│   ├── Model.swift     # ModelClient protocol
 │   └── Conversation.swift
 ├── TinyAgent/          # TinyAgent module
 │   ├── Session.swift   # High-level Session API
@@ -328,19 +265,9 @@ Sources/
 ├── OpenAI/             # TinyAgentOpenAI module
 │   ├── OpenAIModelClient.swift
 │   ├── Types.swift
-│   ├── Config.swift
-│   ├── OpenAIError.swift
 │   └── SSEParser.swift
-└── CLI/                # TinyAgentCLI executable
+└── CLI/
     └── TinyAgentCLI.swift
-
-Tests/
-└── TinyAgentTests/
-    ├── MockModelClient.swift
-    ├── AgentTests.swift
-    ├── SessionTests.swift
-    ├── ToolTests.swift
-    └── OpenAIModelClientTests.swift
 ```
 
 ## SwiftUI Integration
@@ -353,17 +280,16 @@ struct ContentView: View {
     @State private var session: Session?
     @State private var messages: [String] = []
     @State private var inputText = ""
-    
+
     func startSession() async {
         let modelClient = OpenAIModelClient(apiKey: "sk-...")
-        
+
         var builder = SessionBuilder()
         builder.withModelClient(modelClient)
         session = await builder.build()
-        
-        // Listen to events
+
         let events = await session!.events
-        Task.detached { @Sendable in
+        Task {
             for await event in events {
                 await MainActor.run {
                     handleEvent(event)
@@ -371,23 +297,17 @@ struct ContentView: View {
             }
         }
     }
-    
+
     func handleEvent(_ event: AgentEvent) {
-        switch event {
-        case .transcriptDelta(let delta):
-            if delta.source == .assistant && !delta.isComplete {
-                messages.append(delta.content)
-            }
-        default:
-            break
+        if case .transcriptDelta(let delta) = event,
+           delta.source == .assistant && !delta.isComplete {
+            messages.append(delta.content)
         }
     }
-    
+
     var body: some View {
         VStack {
-            List(messages, id: \.self) { msg in
-                Text(msg)
-            }
+            List(messages, id: \.self) { Text($0) }
             HStack {
                 TextField("Message", text: $inputText)
                 Button("Send") {
@@ -398,16 +318,12 @@ struct ContentView: View {
                 }
             }
         }
-        .task {
-            await startSession()
-        }
+        .task { await startSession() }
     }
 }
 ```
 
 ## Testing
-
-The framework includes a `MockModelClient` for testing:
 
 ```swift
 import Testing
@@ -416,50 +332,16 @@ import Testing
 @Test("Agent processes messages")
 func testAgent() async throws {
     let mockClient = MockModelClient(responses: ["Hello!"])
-    
+
     var builder = SessionBuilder()
     builder.withModelClient(mockClient)
-    
+
     let session = await builder.build()
     await session.sendMessage("Hi")
-    
+
     // Assert expected behavior...
 }
 ```
-
-Run tests:
-
-```bash
-swift test
-```
-
-## Why AsyncStream?
-
-The framework uses `AsyncStream` instead of callbacks for several advantages:
-
-1. **Unified Interface**: All events flow through a single `for await` loop
-2. **Type Safety**: The compiler ensures all event cases are handled
-3. **Automatic Lifecycle**: Stream ends when the Task is cancelled
-4. **Composability**: Works seamlessly with other AsyncSequence operators
-5. **Swift Idiomatic**: Natural fit with Swift's structured concurrency
-
-## Security Considerations
-
-### Tool Approval System
-
-The framework implements an approval system for potentially dangerous operations:
-
-- **ShellTool**: Always requires approval (executes arbitrary commands)
-- **ReadFileTool**: Requires approval when:
-  - Reading files outside current working directory
-  - Reading files matching sensitive patterns (`.env`, `.ssh`, secrets, etc.)
-- **GlobTool**: No approval needed (read-only directory listing)
-
-### API Keys
-
-- Never hardcode API keys in source code
-- Use environment variables for configuration
-- The CLI reads `OPENAI_API_KEY` from environment
 
 ## License
 

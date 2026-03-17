@@ -20,6 +20,11 @@ public struct ToolError: Error, Sendable {
 }
 
 /// Tool approval
+///
+/// **Concurrency Safety**: This class is marked as `@unchecked Sendable` because it uses
+/// `CheckedContinuation` for async/await bridging. The continuation is only ever resumed
+/// once (either via `approve()` or `reject()`), and all access to the continuation is
+/// synchronized through the actor isolation of the calling context (`Agent`).
 public final class Approval: @unchecked Sendable {
     public let toolName: String
     public let justification: String

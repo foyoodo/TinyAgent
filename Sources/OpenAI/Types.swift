@@ -123,8 +123,11 @@ public struct Delta: Codable, Sendable {
 
 // MARK: - AnyCodable Helper
 
-// AnyCodable is used internally for encoding JSON parameters where Sendable safety
-// is ensured by the caller (all values come from ToolDefinition.parameters which is [String: Sendable])
+/// AnyCodable is used internally for encoding JSON parameters.
+///
+/// **Concurrency Safety**: Marked as `@unchecked Sendable` because all values come from
+/// `ToolDefinition.parameters` which is `[String: Sendable]`. The caller ensures Sendable
+/// safety by construction - all values are controlled by the framework, not user input.
 struct AnyCodable: Codable, @unchecked Sendable {
     let value: Any
     

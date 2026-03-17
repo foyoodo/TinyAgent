@@ -114,8 +114,8 @@ struct TinyAgentCLI {
         // Get event stream
         let events = await session.events
 
-        // Start event processing loop in background
-        _ = Task.detached { @Sendable in
+        // Start event processing loop in background with proper cancellation support
+        let eventTask = Task { @Sendable in
             await handleEvents(events)
         }
 
@@ -133,6 +133,9 @@ struct TinyAgentCLI {
                 await session.sendMessage(trimmed)
             }
         }
+
+        // Cancel the event processing task on exit
+        eventTask.cancel()
     }
 
     static func handleEvents(_ events: AsyncStream<AgentEvent>) async {
@@ -140,6 +143,9 @@ struct TinyAgentCLI {
         var assistantPrefixPrinted = false
 
         for await event in events {
+            // Check for cancellation at each event
+            if Task.isCancelled { break }
+
             switch event {
             case .idle:
                 print("\n[Agent is idle, waiting for input...]")
