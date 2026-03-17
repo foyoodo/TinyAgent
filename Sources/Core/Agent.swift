@@ -104,14 +104,12 @@ public actor Agent {
         self.pendingInputs = []
         self.pendingToolCalls = []
         self.completedToolResults = [:]
-        
-        // Create event stream
-        var continuation: AsyncStream<AgentEvent>.Continuation!
-        self.eventStream = AsyncStream { cont in
-            continuation = cont
-        }
+
+        // Create event stream using modern factory method
+        let (stream, continuation) = AsyncStream.makeStream(of: AgentEvent.self)
+        self.eventStream = stream
         self.eventContinuation = continuation
-        
+
         // Add system prompt
         if let prompt = systemPrompt {
             self.conversation.append(Conversation.Item(
@@ -160,10 +158,9 @@ public actor Agent {
         let continuation = eventContinuation
         let client = modelClient
 
-        // Use structured concurrency with Task instead of Task.detached
-        // Task inherits actor context but we don't access actor state directly in the closure
-        Task { [weak self] in
-            guard let self = self else { return }
+        // Use structured concurrency - Task inherits actor context
+        // Agent actor methods are serialized, so state access is safe
+        Task {
             do {
                 let response = try await client.sendRequest(request) { chunk in
                     // Forward the delta chunk from model client immediately
@@ -175,9 +172,9 @@ public actor Agent {
                 let finalDelta = TranscriptDelta(content: "", isComplete: true, source: .assistant)
                 continuation.yield(.transcriptDelta(finalDelta))
 
-                await self.handleModelResponse(.success(response))
+                await handleModelResponse(.success(response))
             } catch {
-                await self.handleModelResponse(.failure(error))
+                await handleModelResponse(.failure(error))
             }
         }
     }
@@ -229,9 +226,8 @@ public actor Agent {
         await withTaskGroup(of: Void.self) { group in
             for call in calls {
                 group.addTask {
-                    let result = await toolManager.handleRequest(call) { [weak self] approval in
-                        guard let self = self else { return false }
-                        return await self.requestApproval(approval)
+                    let result = await toolManager.handleRequest(call) { approval in
+                        await self.requestApproval(approval)
                     }
                     await self.handleToolResult(id: call.id, result: result)
                 }

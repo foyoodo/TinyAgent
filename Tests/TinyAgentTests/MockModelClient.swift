@@ -4,18 +4,18 @@ import TinyAgentCore
 /// Mock model provider for testing
 public actor MockModelClient: ModelClient {
     private let responses: [String]
-    private var index = 0
-    
+    private var currentIndex = 0
+
     public init(responses: [String] = ["Hello!", "How can I help you?"]) {
         self.responses = responses
     }
-    
+
     public func sendRequest(
         _ request: ModelRequest,
         onTranscript: (@Sendable (String) -> Void)?
     ) async throws -> ModelClientResponse {
-        let response = responses[index % responses.count]
-        index += 1
+        let response = responses[currentIndex]
+        currentIndex = (currentIndex + 1) % responses.count
         
         // Simulate streaming response
         onTranscript?(response)

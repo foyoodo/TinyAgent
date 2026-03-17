@@ -31,32 +31,36 @@ public struct ShellTool: Tool {
         guard let command = input["command"] as? String else {
             return .failure(ToolError(kind: .invalidInput, reason: "Missing 'command' parameter"))
         }
-        
-        return await withCheckedContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/bash")
-            process.arguments = ["-c", command]
-            
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-            
-            process.terminationHandler = { process in
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                
-                if process.terminationStatus == 0 {
-                    continuation.resume(returning: .success(output))
-                } else {
-                    continuation.resume(returning: .failure(ToolError(kind: .executionFailed, reason: output)))
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", command]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                process.terminationHandler = { process in
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8) ?? ""
+
+                    if process.terminationStatus == 0 {
+                        continuation.resume(returning: .success(output))
+                    } else {
+                        continuation.resume(returning: .failure(ToolError(kind: .executionFailed, reason: output)))
+                    }
+                }
+
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(returning: .failure(ToolError(kind: .executionFailed, reason: error.localizedDescription)))
                 }
             }
-            
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(returning: .failure(ToolError(kind: .executionFailed, reason: error.localizedDescription)))
-            }
+        } onCancel: {
+            process.terminate()
         }
     }
 }

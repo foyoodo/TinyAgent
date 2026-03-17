@@ -115,7 +115,7 @@ struct TinyAgentCLI {
         let events = await session.events
 
         // Start event processing loop in background with proper cancellation support
-        let eventTask = Task { @Sendable in
+        let eventTask = Task {
             await handleEvents(events)
         }
 
