@@ -10,20 +10,24 @@ public actor SSEParser {
         buffer.append(data)
         var events: [String] = []
 
-        while let doubleNewline = buffer.range(of: "\n\n") {
-            let event = String(buffer[..<doubleNewline.lowerBound])
+        while let newline = buffer.range(of: "\n") {
+            let event = String(buffer[..<newline.lowerBound])
             // Remove the processed event including the double newline
-            let removeEnd = doubleNewline.upperBound
+            let removeEnd = newline.upperBound
             if removeEnd < buffer.endIndex {
                 buffer.removeSubrange(buffer.startIndex..<removeEnd)
             } else {
                 buffer.removeAll()
             }
 
-            // Parse field line: "data: {...}"
-            if let colonRange = event.range(of: ": ") {
-                let field = String(event[..<colonRange.lowerBound])
-                let value = String(event[colonRange.upperBound...])
+            // Parse field line: "data: {...}" or "data:{...}"
+            if let colonIndex = event.firstIndex(of: ":") {
+                let field = String(event[..<colonIndex])
+                var value = String(event[event.index(after: colonIndex)...])
+                // Strip optional leading space after colon
+                if value.first == " " {
+                    value.removeFirst()
+                }
 
                 if field == "data" {
                     events.append(value)
@@ -41,9 +45,13 @@ public actor SSEParser {
         guard !remaining.isEmpty else { return [] }
 
         // Try to parse any remaining data
-        if let colonRange = remaining.range(of: ": ") {
-            let field = String(remaining[..<colonRange.lowerBound])
-            let value = String(remaining[colonRange.upperBound...])
+        if let colonIndex = remaining.firstIndex(of: ":") {
+            let field = String(remaining[..<colonIndex])
+            var value = String(remaining[remaining.index(after: colonIndex)...])
+            // Strip optional leading space after colon
+            if value.first == " " {
+                value.removeFirst()
+            }
 
             if field == "data" {
                 return [value]

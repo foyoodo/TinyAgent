@@ -77,13 +77,9 @@ struct SSEParserTests {
         // Note: SSE format requires "data: " (colon + space) prefix and double newlines between events
         let sseStream = """
             data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{"reasoning_content":"Hello"}}]}
-
             data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{"reasoning_content":" world"}}]}
-
             data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{"content":"!"}}]}
-
             data: [DONE]
-
             """
         
         var allContent: String = ""
@@ -111,15 +107,10 @@ struct SSEParserTests {
         // Mixed stream with both reasoning_content and content
         let sseStream = """
             data: {"id":"1","choices":[{"delta":{"role":"assistant"}}]}
-
             data: {"id":"1","choices":[{"delta":{"reasoning_content":"Let me think"}}]}
-
             data: {"id":"1","choices":[{"delta":{"reasoning_content":" about this"}}]}
-
             data: {"id":"1","choices":[{"delta":{"content":"Final answer"}}]}
-
             data: {"id":"1","choices":[{"delta":{},"finish_reason":"stop"}]}
-
             """
         
         let events = await parser.parse(sseStream)
