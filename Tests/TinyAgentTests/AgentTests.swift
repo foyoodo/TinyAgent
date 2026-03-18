@@ -30,7 +30,7 @@ struct AgentTests {
         let holder = TranscriptHolder()
         let response = try await mockClient.sendRequest(
             ModelRequest(messages: [], tools: []),
-            onTranscript: { transcript, _ in
+            onTranscript: { transcript, _, _ in
                 Task { await holder.set(transcript) }
             }
         )

@@ -12,13 +12,13 @@ public actor MockModelClient: ModelClient {
 
     public func sendRequest(
         _ request: ModelRequest,
-        onTranscript: (@Sendable (String, Bool) -> Void)?
+        onTranscript: (@Sendable (String, Bool, Bool) -> Void)?
     ) async throws -> ModelClientResponse {
         let response = responses[currentIndex]
         currentIndex = (currentIndex + 1) % responses.count
 
-        // Simulate streaming response (isReasoning = false for mock)
-        onTranscript?(response, false)
+        // Simulate streaming response (isReasoning = false, isStartOfMessage = true)
+        onTranscript?(response, false, true)
 
         return ModelClientResponse(
             transcript: response,

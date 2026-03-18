@@ -66,9 +66,16 @@ public struct TranscriptDelta: Sendable {
 
 /// Model client protocol
 public protocol ModelClient: Sendable {
+    /// Send a request to the model
+    /// - Parameters:
+    ///   - request: The model request
+    ///   - onTranscript: Callback for streaming transcript updates. Parameters:
+    ///     - String: The content chunk
+    ///     - Bool: Whether this is reasoning content
+    ///     - Bool: Whether this is the start of a new message (has role field)
     func sendRequest(
         _ request: ModelRequest,
-        onTranscript: (@Sendable (String, Bool) -> Void)?
+        onTranscript: (@Sendable (String, Bool, Bool) -> Void)?
     ) async throws -> ModelClientResponse
 }
 
@@ -179,7 +186,7 @@ public actor Agent {
         // Agent actor methods are serialized, so state access is safe
         Task {
             do {
-                let response = try await client.sendRequest(request) { chunk, isReasoning in
+                let response = try await client.sendRequest(request) { chunk, isReasoning, _ in
                     // Forward the delta chunk from model client immediately
                     let delta = TranscriptDelta(content: chunk, isComplete: false, source: .assistant(isReasoning: isReasoning))
                     continuation.yield(.transcriptDelta(delta))

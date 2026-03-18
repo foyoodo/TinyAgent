@@ -105,11 +105,13 @@ public struct Choice: Codable, Sendable {
 
 /// Delta content in a streaming chunk
 public struct Delta: Codable, Sendable {
+    public let role: String?
     public let content: String?
     public let reasoningContent: String?
     public let toolCalls: [ToolCall]?
 
     enum CodingKeys: String, CodingKey {
+        case role
         case content
         case reasoningContent = "reasoning_content"
         case toolCalls = "tool_calls"

@@ -33,7 +33,7 @@ struct ModelClientConfig: Sendable {
 struct MockModelClient: ModelClient, Sendable {
     func sendRequest(
         _ request: ModelRequest,
-        onTranscript: (@Sendable (String, Bool) -> Void)?
+        onTranscript: (@Sendable (String, Bool, Bool) -> Void)?
     ) async throws -> ModelClientResponse {
         let response = "I'm a mock model. To use real LLMs, set OPENAI_API_KEY environment variable."
 
@@ -42,7 +42,8 @@ struct MockModelClient: ModelClient, Sendable {
         for (index, word) in words.enumerated() {
             let isLast = index == words.count - 1
             let content = isLast ? word : word + " "
-            onTranscript?(content, false)
+            // First word is start of message
+            onTranscript?(content, false, index == 0)
             try? await Task.sleep(nanoseconds: 50_000_000) // 50ms between words
         }
 
@@ -139,10 +140,8 @@ struct TinyAgentCLI {
     }
 
     static func handleEvents(_ events: AsyncStream<AgentEvent>) async {
-        // Tracks whether we've printed the assistant prefix for the current streaming response
-        var assistantPrefixPrinted = false
-        // Tracks whether we're currently in reasoning mode
-        var inReasoningMode = false
+        // Track current output mode to detect transitions
+        var currentMode: TranscriptSource? = nil
 
         for await event in events {
             // Check for cancellation at each event
@@ -151,52 +150,33 @@ struct TinyAgentCLI {
             switch event {
             case .idle:
                 print("\n[Agent is idle, waiting for input...]")
-                // Reset the prefix flags when agent becomes idle
-                assistantPrefixPrinted = false
-                inReasoningMode = false
+                currentMode = nil
 
             case .transcriptDelta(let delta):
                 switch delta.source {
                 case .user:
                     // User input is always complete, print directly
                     print("User: \(delta.content)")
+
                 case .assistant(let isReasoning):
                     if delta.isComplete {
-                        // Streaming finished, print newline and reset flags
-                        if inReasoningMode {
-                            print("]")
-                        }
+                        // Streaming finished, print newline and reset state
                         print("")
-                        assistantPrefixPrinted = false
-                        inReasoningMode = false
-                    } else {
-                        if isReasoning {
-                            // Switch to or continue reasoning mode
-                            if !inReasoningMode {
-                                // First reasoning chunk - print header
-                                if assistantPrefixPrinted {
-                                    // End any previous normal output
-                                    print("")
-                                }
-                                print("Assistant (thinking): [", terminator: "")
-                                inReasoningMode = true
-                                assistantPrefixPrinted = true
+                        currentMode = nil
+                    } else if !delta.content.isEmpty {
+                        // Check if this is a new message or mode transition
+                        let newMode: TranscriptSource = .assistant(isReasoning: isReasoning)
+
+                        if currentMode != newMode {
+                            // Mode changed - print appropriate header
+                            if isReasoning {
+                                print("Assistant (thinking): ", terminator: "")
+                            } else {
+                                print("\nAssistant: ", terminator: "")
                             }
-                            print(delta.content, terminator: "")
-                        } else {
-                            // Switch to or continue normal content mode
-                            if inReasoningMode {
-                                // End reasoning mode
-                                print("]")
-                                inReasoningMode = false
-                            }
-                            if !assistantPrefixPrinted {
-                                print("Assistant: ", terminator: "")
-                                assistantPrefixPrinted = true
-                            }
-                            print(delta.content, terminator: "")
+                            currentMode = newMode
                         }
-                        // Force stdout flush for real-time streaming display
+                        print(delta.content, terminator: "")
                         fflush(stdout)
                     }
                 }

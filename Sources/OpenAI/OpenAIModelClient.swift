@@ -23,7 +23,7 @@ public actor OpenAIModelClient: ModelClient {
     
     public func sendRequest(
         _ request: ModelRequest,
-        onTranscript: (@Sendable (String, Bool) -> Void)?
+        onTranscript: (@Sendable (String, Bool, Bool) -> Void)?
     ) async throws -> ModelClientResponse {
         let url = URL(string: "\(config.baseURL)/chat/completions")!
         var urlRequest = URLRequest(url: url)
@@ -100,12 +100,18 @@ public actor OpenAIModelClient: ModelClient {
                     }
                     
                     // Handle content delta (supports both content and reasoning_content fields)
+                    // Check if this chunk has a role field (indicates start of assistant message)
+                    let isStartOfMessage = choice.delta.role != nil
+
                     if let contentText = choice.delta.content {
                         content.append(contentText)
-                        onTranscript?(contentText, false)
+                        onTranscript?(contentText, false, isStartOfMessage)
                     } else if let reasoningText = choice.delta.reasoningContent {
                         content.append(reasoningText)
-                        onTranscript?(reasoningText, true)
+                        onTranscript?(reasoningText, true, isStartOfMessage)
+                    } else if isStartOfMessage {
+                        // Role-only chunk: signal start of message without content
+                        onTranscript?("", false, true)
                     }
                     
                     // Handle tool calls
